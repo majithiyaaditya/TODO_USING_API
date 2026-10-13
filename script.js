@@ -1,111 +1,139 @@
-const title = document.getElementById("title");
-const des = document.getElementById("textarea");
-const btn = document.getElementById("btn");
-const show = document.getElementById("show");
+const API_URL = "https://api.freeapi.app/api/v1/todos";
 
-//Add task
-btn.addEventListener("click", () => {
-  createTodo(title, des);
-  title.value = "";
-  des.value = "";
+const form = document.querySelector("#todo-form");
+const titleInput = document.querySelector("#title");
+const descriptionInput = document.querySelector("#description");
+const todoList = document.querySelector("#todo-list");
+const submitButton = document.querySelector("#submit-button");
+const emptyMessage = document.querySelector("#empty-message");
+const statusMessage = document.querySelector("#status-message");
+
+let todos = [];
+let editingId = null;
+
+// Show a message
+function setStatus(message) {
+  statusMessage.textContent = message;
+}
+
+// Send API requests
+async function sendRequest(url, options = {}) {
+  const response = await fetch(url, options);
+
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`);
+  }
+
+  if (options.method === "DELETE" || response.status === 204) {
+    return null;
+  }
+
+  return response.json();
+}
+
+// Get and display tasks
+async function refreshTodos() {
+  const result = await sendRequest(API_URL);
+
+  if (!Array.isArray(result.data)) {
+    throw new Error("Invalid task list.");
+  }
+
+  todos = result.data;
+  renderTodos();
+}
+
+// Display tasks
+function renderTodos() {
+  todoList.replaceChildren();
+  emptyMessage.hidden = todos.length > 0;
+
+  todos.forEach((todo) => {
+    const item = document.createElement("li");
+    const title = document.createElement("h3");
+    const description = document.createElement("p");
+    const editButton = document.createElement("button");
+    const deleteButton = document.createElement("button");
+
+    title.textContent = todo.title;
+    description.textContent = todo.description || "";
+
+    editButton.textContent = "Edit";
+    deleteButton.textContent = "Delete";
+    editButton.type = deleteButton.type = "button";
+
+    // Edit task
+    editButton.addEventListener("click", () => {
+      titleInput.value = todo.title;
+      descriptionInput.value = todo.description || "";
+      editingId = todo._id;
+      submitButton.textContent = "Save Changes";
+      titleInput.focus();
+      setStatus(`Editing "${todo.title}".`);
+    });
+
+    // Delete task
+    deleteButton.addEventListener("click", async () => {
+      try {
+        await sendRequest(`${API_URL}/${todo._id}`, {
+          method: "DELETE",
+        });
+
+        if (editingId === todo._id) resetForm();
+
+        await refreshTodos();
+        setStatus("To-do deleted.");
+      } catch (error) {
+        setStatus(`Delete failed: ${error.message}`);
+      }
+    });
+
+    item.append(title, description, editButton, deleteButton);
+    todoList.appendChild(item);
+  });
+}
+
+// Clear the form
+function resetForm() {
+  form.reset();
+  editingId = null;
+  submitButton.textContent = "Add To-Do";
+}
+
+// Add or update a task
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const title = titleInput.value.trim();
+  const description = descriptionInput.value.trim();
+
+  if (!title) {
+    setStatus("Please enter a title.");
+    titleInput.focus();
+    return;
+  }
+
+  // Editing Logic
+  const isEditing = editingId !== null;
+  const url = isEditing ? `${API_URL}/${editingId}` : `${API_URL}/`;
+
+  try {
+    await sendRequest(url, {
+      method: isEditing ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, description }),
+    });
+
+    await refreshTodos();
+    resetForm();
+
+    setStatus(isEditing ? "To-do updated." : "To-do added.");
+  } catch (error) {
+    setStatus(`Request failed: ${error.message}`);
+  }
 });
 
-// show data
-show.addEventListener("click", () => {
-  showData();
+// Load tasks when the page opens
+refreshTodos().catch((error) => {
+  setStatus(`Could not load tasks: ${error.message}`);
 });
-
-// Show data
-async function showData() {
-  try {
-    const response = await fetch("https://api.freeapi.app/api/v1/todos");
-
-    if (!response.ok) {
-      console.log("error ") + response.status;
-    }
-
-    const all_data = await response.json();
-    let num = 1;
-    all_data.data.forEach((element) => {
-      console.log("Task = " + num);
-
-      console.log("ID = " + element._id);
-      console.log("Title = " + element.title);
-      console.log("description = " + element.description);
-      num = num + 1;
-    });
-  } catch (error) {
-    console.log(error);
-  }
-}
-
-// create todo and Add task
-async function createTodo(title, des) {
-  try {
-    // this is add task url formeting.
-    const add = await fetch("https://api.freeapi.app/api/v1/todos/", {
-      method: "POST",
-      headers: { "content-Type": "application/json" },
-      body: JSON.stringify({
-        title: title.value,
-        description: des.value,
-      }),
-    });
-    if (!add.ok) {
-      console.log("error status is = " + add.status);
-    }
-    const show = await add.json();
-
-    console.log(show);
-  } catch (error) {
-    console.log("something went wrong = " + error);
-  }
-}
-
-// update todo .
-async function updateTodo() {
-  try {
-    const update = await fetch(
-      "https://api.freeapi.app/api/v1/todos/6acb6cec2817d4d583faa540",
-      {
-        method: "PATCH",
-        headers: {
-          "content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title: "Updated Task",
-          description: "this is Updated task add",
-        }),
-      },
-    );
-
-    if (!update.ok) {
-      console.log("error status = " + update.status);
-      return;
-    }
-    const show = await update.json();
-    console.log(show);
-  } catch (error) {
-    console.log("something went wrong = " + error);
-  }
-}
-
-// Delete task
-
-async function deletetask() {
-  try {
-    const dlt = await fetch(
-      "https://api.freeapi.app/api/v1/todos/6acb7a9835f4e2d334560cb8",
-      { method: "DELETE" },
-    );
-
-    if (!dlt.ok) {
-      console.log("error status = " + dlt.status);
-      return;
-    }
-    const show = await dlt.json();
-    console.log(show);
-  } catch (error) {
-    console.log("something went wrong = " + error);
-  }
-}
